@@ -38,7 +38,9 @@ def load_llff(folder, split="train", resize_factor=1.0, hold=8):
     W_s     = int(round(W * scale))
 
     img_files = sorted(glob.glob(os.path.join(img_dir, '*.jpg')) +
-                       glob.glob(os.path.join(img_dir, '*.png')))
+                       glob.glob(os.path.join(img_dir, '*.JPG')) +
+                       glob.glob(os.path.join(img_dir, '*.png')) +
+                       glob.glob(os.path.join(img_dir, '*.PNG')))
     indices   = np.arange(len(img_files))
     indices   = indices[indices % hold != 0] if split == 'train' else indices[indices % hold == 0]
 
