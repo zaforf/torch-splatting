@@ -1,0 +1,17 @@
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# venv
+.venv/
+
+# training outputs
+output/
+*.ply
+
+# data
+lego/
+
+# os
+.DS_Store
