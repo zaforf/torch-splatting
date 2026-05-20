@@ -177,9 +177,9 @@ def main():
     # xyz LR decays exponentially: 1.6e-4 -> 1.6e-6 over training
     xyz_lr_decay = (1.6e-6 / 1.6e-4) ** (1.0 / args.steps)
 
-    # grad accumulators for densification signal (use xyz.grad norm as proxy)
-    grad_accum = torch.zeros(args.n_gaussians, 1, device=device)
-    grad_count = torch.zeros(args.n_gaussians, 1, device=device, dtype=torch.long)
+    N = len(model._xyz)
+    grad_accum = torch.zeros(N, 1, device=device)
+    grad_count = torch.zeros(N, 1, device=device, dtype=torch.long)
 
     pbar = tqdm(range(1, args.steps + 1))
     for step in pbar:
