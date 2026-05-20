@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
-from data import load_nerf_synthetic
+from data import load_nerf_synthetic, load_llff, load_mip360
 from camera import to_viewpoint_camera
 from model import GSModel
 from renderer import render
@@ -30,13 +30,19 @@ def show_views(model, data, indices=(0, 10, 20, 30), device="cuda"):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("ply")
-    parser.add_argument("--data",   default="lego")
-    parser.add_argument("--resize", type=float, default=0.5)
+    parser.add_argument("--data",       default="lego")
+    parser.add_argument("--scene_type", default="blender", choices=["blender", "mip360", "llff"])
+    parser.add_argument("--resize",     type=float, default=0.5)
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    data = load_nerf_synthetic(args.data, split="train", resize_factor=args.resize)
+    if args.scene_type == "llff":
+        data = load_llff(args.data, split="train", resize_factor=args.resize)
+    elif args.scene_type == "mip360":
+        data = load_mip360(args.data, split="train", resize_factor=args.resize)
+    else:
+        data = load_nerf_synthetic(args.data, split="train", resize_factor=args.resize)
     data = {k: v.to(device) for k, v in data.items()}
 
     model = GSModel()
