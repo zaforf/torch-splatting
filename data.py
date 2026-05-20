@@ -12,7 +12,13 @@ def load_mip360(folder, split="train", resize_factor=1.0):
     Load a Mip-NeRF 360 dataset split (real captures, COLMAP convention, no alpha).
     Supports both top-level and per-frame intrinsics.
     """
-    with open(os.path.join(folder, f"transforms_{split}.json")) as f:
+    for candidate in [f"transforms_{split}.json", "transforms.json"]:
+        path = os.path.join(folder, candidate)
+        if os.path.exists(path):
+            break
+    else:
+        raise FileNotFoundError(f"no transforms JSON found in {folder}")
+    with open(path) as f:
         meta = json.load(f)
 
     rgbs, cameras = [], []
