@@ -79,7 +79,7 @@ class GSModel(nn.Module):
         n_rest = sum(1 for n in verts.dtype.names if n.startswith('f_rest_'))
         if n_rest:
             f_rest_flat = torch.tensor(np.stack([verts[f'f_rest_{i}'] for i in range(n_rest)], -1), dtype=torch.float32)
-            f_rest = f_rest_flat.reshape(len(xyz), 3, n_rest // 3).permute(0, 2, 1)
+            f_rest = f_rest_flat.reshape(len(xyz), n_rest // 3, 3)  # interleaved -> [N, K-1, 3]
         else:
             f_rest = torch.zeros(len(xyz), 0, 3)
         opacity  = torch.tensor(verts['opacity'][:, None], dtype=torch.float32)
@@ -99,8 +99,8 @@ class GSModel(nn.Module):
         from plyfile import PlyData, PlyElement
 
         xyz      = self._xyz.detach().cpu().numpy()
-        f_dc     = self._features_dc.detach().transpose(1, 2).flatten(1).cpu().numpy()
-        f_rest   = self._features_rest.detach().transpose(1, 2).flatten(1).cpu().numpy()
+        f_dc     = self._features_dc.detach().flatten(1).cpu().numpy()    # [N,1,3] -> [N,3]
+        f_rest   = self._features_rest.detach().flatten(1).cpu().numpy()  # [N,K-1,3] -> [N,3*(K-1)] interleaved
         opacity  = self._opacity.detach().cpu().numpy()
         scaling  = self._scaling.detach().cpu().numpy()
         rotation = self._rotation.detach().cpu().numpy()
