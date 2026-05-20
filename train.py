@@ -149,8 +149,9 @@ def main():
     data   = {k: v.to(device) for k, v in data.items()}
     N_cams = len(data["rgb"])
 
-    model = GSModel(sh_deg=0)          # start at degree 0, ramp up below
+    model = GSModel(sh_deg=args.sh_degree)  # allocate full SH capacity
     model.init_from_random(args.n_gaussians, device=device)
+    model.sh_deg = 0                        # start evaluating at degree 0
     opt   = make_optimizer(model)
 
     # xyz LR decays exponentially: 1.6e-4 -> 1.6e-6 over training
