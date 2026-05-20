@@ -70,6 +70,31 @@ class GSModel(nn.Module):
 
     # --- saving ---
 
+    def load_ply(self, path, device="cuda"):
+        from plyfile import PlyData
+        verts = PlyData.read(path)['vertex'].data
+
+        xyz = torch.tensor(np.stack([verts['x'], verts['y'], verts['z']], -1), dtype=torch.float32)
+        f_dc = torch.tensor(np.stack([verts[f'f_dc_{i}'] for i in range(3)], -1), dtype=torch.float32).unsqueeze(1)
+        n_rest = sum(1 for n in verts.dtype.names if n.startswith('f_rest_'))
+        if n_rest:
+            f_rest_flat = torch.tensor(np.stack([verts[f'f_rest_{i}'] for i in range(n_rest)], -1), dtype=torch.float32)
+            f_rest = f_rest_flat.reshape(len(xyz), 3, n_rest // 3).permute(0, 2, 1)
+        else:
+            f_rest = torch.zeros(len(xyz), 0, 3)
+        opacity  = torch.tensor(verts['opacity'][:, None], dtype=torch.float32)
+        scaling  = torch.tensor(np.stack([verts[f'scale_{i}'] for i in range(3)], -1), dtype=torch.float32)
+        rotation = torch.tensor(np.stack([verts[f'rot_{i}']   for i in range(4)], -1), dtype=torch.float32)
+
+        K = 1 + f_rest.shape[1]
+        self.sh_deg = int(round(K ** 0.5)) - 1
+        self._xyz           = nn.Parameter(xyz.to(device))
+        self._features_dc   = nn.Parameter(f_dc.to(device))
+        self._features_rest = nn.Parameter(f_rest.to(device))
+        self._opacity       = nn.Parameter(opacity.to(device))
+        self._scaling       = nn.Parameter(scaling.to(device))
+        self._rotation      = nn.Parameter(rotation.to(device))
+
     def save_ply(self, path):
         from plyfile import PlyData, PlyElement
 
