@@ -22,7 +22,9 @@ def show_views(model, data, indices=(0, 10, 20, 30), device="cuda"):
         axes[row][0].imshow(img);  axes[row][0].set_title(f"rendered [{i}]"); axes[row][0].axis("off")
         axes[row][1].imshow(gt);   axes[row][1].set_title(f"gt [{i}]");       axes[row][1].axis("off")
     plt.tight_layout()
-    plt.show()
+    plt.savefig("viz_out.png", dpi=100, bbox_inches="tight")
+    plt.close()
+    print("saved viz_out.png")
 
 
 if __name__ == "__main__":
