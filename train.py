@@ -207,16 +207,16 @@ def main():
                 model, opt, grad_accum, grad_count,
                 grad_threshold=args.densify_grad_thresh)
 
-        # opacity reset every 3000 steps
-        if step % 3_000 == 0:
-            reset_opacity(model, opt)
-
         if step % 500 == 0:
             p = psnr(rendered.detach(), gt_rgb).item()
             pbar.set_postfix(loss=f"{loss.item():.4f}", psnr=f"{p:.2f}", n={len(model._xyz)})
 
         if step % 5_000 == 0 or step == args.steps:
             model.save_ply(os.path.join(args.out, f"splats_{step:06d}.ply"))
+
+        # opacity reset every 3000 steps — must come after save_ply
+        if step % 3_000 == 0:
+            reset_opacity(model, opt)
 
 
 if __name__ == "__main__":
