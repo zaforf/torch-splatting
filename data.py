@@ -7,6 +7,62 @@ import torch
 import imageio.v2 as imageio
 
 
+def load_mip360(folder, split="train", resize_factor=1.0):
+    """
+    Load a Mip-NeRF 360 dataset split (real captures, COLMAP convention, no alpha).
+    Supports both top-level and per-frame intrinsics.
+    """
+    with open(os.path.join(folder, f"transforms_{split}.json")) as f:
+        meta = json.load(f)
+
+    rgbs, cameras = [], []
+
+    for frame in meta["frames"]:
+        img_path = os.path.join(folder, frame["file_path"])
+        if not os.path.exists(img_path):
+            img_path = img_path + ".jpg"
+        img = imageio.imread(img_path).astype(np.float32) / 255.0
+        img = img[..., :3]                                  # drop alpha if present
+
+        H, W = img.shape[:2]
+        if resize_factor != 1.0:
+            import torch.nn.functional as F
+            t = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0)
+            t = F.interpolate(t, scale_factor=resize_factor, mode="bilinear", align_corners=False)
+            img = t.squeeze(0).permute(1, 2, 0).numpy()
+            H, W = img.shape[:2]
+
+        fl_x = frame.get("fl_x", meta["fl_x"]) * resize_factor
+        fl_y = frame.get("fl_y", meta["fl_y"]) * resize_factor
+        cx   = frame.get("cx",   meta["cx"])    * resize_factor
+        cy   = frame.get("cy",   meta["cy"])    * resize_factor
+
+        intrinsic = np.eye(4, dtype=np.float32)
+        intrinsic[0, 0] = fl_x
+        intrinsic[1, 1] = fl_y
+        intrinsic[0, 2] = cx
+        intrinsic[1, 2] = cy
+
+        # Mip-NeRF 360 is Blender/OpenGL convention — same flip as synthetic
+        c2w = np.array(frame["transform_matrix"], dtype=np.float32)
+        c2w[:, 1:3] *= -1
+
+        cam = np.concatenate([
+            [float(H), float(W)],
+            intrinsic.flatten(),
+            c2w.flatten(),
+        ]).astype(np.float32)
+
+        rgbs.append(img)
+        cameras.append(cam)
+
+    return {
+        "rgb":    torch.from_numpy(np.stack(rgbs,     0)),
+        "alpha":  torch.ones(len(rgbs), *rgbs[0].shape[:2]),
+        "camera": torch.from_numpy(np.stack(cameras,  0)),
+    }
+
+
 def load_nerf_synthetic(folder, split="train", resize_factor=1.0, white_bkgd=True):
     """
     Load a NeRF synthetic (Blender) dataset split.

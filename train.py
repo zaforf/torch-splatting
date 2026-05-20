@@ -134,18 +134,27 @@ def reset_opacity(model, optimizer):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data",        default="lego")
+    parser.add_argument("--scene_type", default="blender", choices=["blender", "mip360"])
     parser.add_argument("--steps",       type=int,   default=30_000)
     parser.add_argument("--n_gaussians", type=int,   default=50_000)
     parser.add_argument("--sh_degree",   type=int,   default=3)
     parser.add_argument("--resize",      type=float, default=0.5)
-    parser.add_argument("--out",         default="output")
+    parser.add_argument("--white_bkgd",  action="store_true", default=True)
+    parser.add_argument("--no_white_bkgd", dest="white_bkgd", action="store_false")
+    parser.add_argument("--out",         default=None)
     args = parser.parse_args()
+    if args.out is None:
+        args.out = os.path.join("output", os.path.basename(args.data.rstrip("/")))
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     os.makedirs(args.out, exist_ok=True)
 
     print("Loading data...")
-    data   = load_nerf_synthetic(args.data, split="train", resize_factor=args.resize)
+    if args.scene_type == "mip360":
+        from data import load_mip360
+        data = load_mip360(args.data, split="train", resize_factor=args.resize)
+    else:
+        data = load_nerf_synthetic(args.data, split="train", resize_factor=args.resize)
     data   = {k: v.to(device) for k, v in data.items()}
     N_cams = len(data["rgb"])
 
@@ -167,7 +176,7 @@ def main():
         cam    = to_viewpoint_camera(data["camera"][i])
         gt_rgb = data["rgb"][i]
 
-        rendered = render(cam, model)
+        rendered = render(cam, model, white_bkgd=args.white_bkgd)
 
         loss = (0.8 * l1_loss(rendered, gt_rgb)
               + 0.2 * (1.0 - ssim(rendered.permute(2,0,1).unsqueeze(0),
