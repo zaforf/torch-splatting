@@ -69,11 +69,11 @@ def replace_params(optimizer, model, new_tensors, keep_mask, n_new):
 # densification  (paper §5.2 — clone, split, prune)
 # ---------------------------------------------------------------------------
 
-def densify_and_prune(model, optimizer, grad_accum, grad_count, scene_extent=2.0):
+def densify_and_prune(model, optimizer, grad_accum, grad_count, scene_extent=2.0, grad_threshold=2e-4):
     avg_grad = (grad_accum / grad_count.clamp(min=1)).squeeze(-1)  # [N]
 
     is_large   = model.get_scaling.max(dim=1).values >= 0.01 * scene_extent
-    needs_d    = avg_grad > 2e-4
+    needs_d    = avg_grad > grad_threshold
     clone_mask = needs_d & ~is_large   # under-reconstructed small gaussians -> duplicate
     split_mask = needs_d &  is_large   # over-reconstructed large gaussians  -> split into 2
     prune_mask = (model.get_opacity.squeeze() < 5e-3) | \
@@ -140,8 +140,10 @@ def main():
     parser.add_argument("--sh_degree",   type=int,   default=3)
     parser.add_argument("--resize",      type=float, default=0.5)
     parser.add_argument("--white_bkgd",  action="store_true", default=True)
-    parser.add_argument("--no_white_bkgd", dest="white_bkgd", action="store_false")
-    parser.add_argument("--out",         default=None)
+    parser.add_argument("--no_white_bkgd",     dest="white_bkgd", action="store_false")
+    parser.add_argument("--densify_grad_thresh", type=float, default=2e-4)
+    parser.add_argument("--densify_until",       type=int,   default=15_000)
+    parser.add_argument("--out",                 default=None)
     args = parser.parse_args()
     if args.out is None:
         args.out = os.path.join("output", os.path.basename(args.data.rstrip("/")))
@@ -200,8 +202,10 @@ def main():
         model.sh_deg = min(args.sh_degree, step // 1000)
 
         # densification: clone/split/prune between steps 500–15000
-        if 500 <= step <= 15_000 and step % 100 == 0:
-            grad_accum, grad_count = densify_and_prune(model, opt, grad_accum, grad_count)
+        if 500 <= step <= args.densify_until and step % 100 == 0:
+            grad_accum, grad_count = densify_and_prune(
+                model, opt, grad_accum, grad_count,
+                grad_threshold=args.densify_grad_thresh)
 
         # opacity reset every 3000 steps
         if step % 3_000 == 0:
