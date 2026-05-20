@@ -81,13 +81,27 @@ def get_radius(cov2d):
 
 
 def rasterize(means2D, cov2d, colors, opacity, depths, W, H, white_bkgd=True):
-    TILE  = 16
-    dev   = means2D.device
-    radii = get_radius(cov2d)           # [N]
+    TILE = 64
+    dev  = means2D.device
 
-    # precompute bounding boxes
-    lo = means2D - radii[:, None]       # [N, 2]
-    hi = means2D + radii[:, None]       # [N, 2]
+    # analytical 2x2 inverse — avoids linalg.inv per tile
+    det    = (cov2d[:, 0, 0] * cov2d[:, 1, 1] - cov2d[:, 0, 1] ** 2).clamp(min=1e-6)
+    conics = torch.stack([
+         cov2d[:, 1, 1] / det,
+        -cov2d[:, 0, 1] / det,
+         cov2d[:, 0, 0] / det,
+    ], dim=-1)  # [N, 3] as (a, b, c) where Σ^{-1} = [[a,b],[b,c]]
+
+    # global depth sort once — avoids argsort per tile
+    order   = torch.argsort(depths)
+    means2D = means2D[order]
+    conics  = conics[order]
+    colors  = colors[order]
+    opacity = opacity[order]
+
+    radii = get_radius(cov2d[order])
+    lo    = means2D - radii[:, None]
+    hi    = means2D + radii[:, None]
 
     pix = torch.stack(torch.meshgrid(
         torch.arange(W, device=dev, dtype=torch.float32),
@@ -101,7 +115,6 @@ def rasterize(means2D, cov2d, colors, opacity, depths, W, H, white_bkgd=True):
             ty = min(TILE, H - tile_y)
             tx = min(TILE, W - tile_x)
 
-            # gaussians whose bounding box overlaps this tile
             in_tile = (
                 (lo[:, 0] < tile_x + tx) & (hi[:, 0] >= tile_x) &
                 (lo[:, 1] < tile_y + ty) & (hi[:, 1] >= tile_y)
@@ -109,33 +122,24 @@ def rasterize(means2D, cov2d, colors, opacity, depths, W, H, white_bkgd=True):
             if not in_tile.any():
                 continue
 
-            # sort front to back
-            idx = torch.argsort(depths[in_tile])
-            g_xy  = means2D[in_tile][idx]               # [P, 2]
-            g_cov = cov2d[in_tile][idx]                 # [P, 2, 2]
-            g_col = colors[in_tile][idx]                # [P, 3]
-            g_opa = opacity[in_tile][idx]               # [P, 1]
+            # already depth-sorted globally — no argsort needed
+            g_xy  = means2D[in_tile]    # [P, 2]
+            g_con = conics[in_tile]     # [P, 3]
+            g_col = colors[in_tile]     # [P, 3]
+            g_opa = opacity[in_tile]    # [P, 1]
 
-            conic = torch.linalg.inv(g_cov)             # [P, 2, 2]
-
-            # pixel offsets from each gaussian center:  [B, P, 2]
             tile_pix = pix[tile_y:tile_y+ty, tile_x:tile_x+tx].reshape(-1, 2)
             d  = tile_pix[:, None, :] - g_xy[None, :, :]
-            du, dv = d[..., 0], d[..., 1]              # [B, P]
+            du, dv = d[..., 0], d[..., 1]
 
-            # Mahalanobis distance  d^T Σ^{-1} d
-            q = (conic[None, :, 0, 0] * du*du
-               + conic[None, :, 1, 1] * dv*dv
-               + 2 * conic[None, :, 0, 1] * du*dv)     # [B, P]
+            q = g_con[None,:,0]*du*du + 2*g_con[None,:,1]*du*dv + g_con[None,:,2]*dv*dv
 
-            alpha = (torch.exp(-0.5 * q).unsqueeze(-1) * g_opa[None]).clamp(max=0.99)  # [B, P, 1]
+            alpha = (torch.exp(-0.5 * q).unsqueeze(-1) * g_opa[None]).clamp(max=0.99)
+            T     = torch.cat([torch.ones_like(alpha[:,:1]), 1 - alpha[:,:-1]], dim=1).cumprod(1)
 
-            # transmittance T_i = prod_{j < i} (1 - alpha_j)
-            T = torch.cat([torch.ones_like(alpha[:, :1]), 1 - alpha[:, :-1]], dim=1).cumprod(1)
-
-            tile_color = (T * alpha * g_col[None]).sum(1)   # [B, 3]
+            tile_color = (T * alpha * g_col[None]).sum(1)
             if white_bkgd:
-                tile_color += (1 - (alpha * T).sum(1))      # add background contribution
+                tile_color += (1 - (alpha * T).sum(1))
 
             out[tile_y:tile_y+ty, tile_x:tile_x+tx] = tile_color.reshape(ty, tx, 3)
 
