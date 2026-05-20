@@ -143,6 +143,7 @@ def main():
     parser.add_argument("--no_white_bkgd",     dest="white_bkgd", action="store_false")
     parser.add_argument("--densify_grad_thresh", type=float, default=2e-4)
     parser.add_argument("--densify_until",       type=int,   default=15_000)
+    parser.add_argument("--scene_extent",        type=float, default=2.0)
     parser.add_argument("--out",                 default=None)
     args = parser.parse_args()
     if args.out is None:
@@ -208,7 +209,8 @@ def main():
         if 500 <= step <= args.densify_until and step % 100 == 0:
             grad_accum, grad_count = densify_and_prune(
                 model, opt, grad_accum, grad_count,
-                grad_threshold=args.densify_grad_thresh)
+                grad_threshold=args.densify_grad_thresh,
+                scene_extent=args.scene_extent)
 
         if step % 500 == 0:
             p = psnr(rendered.detach(), gt_rgb).item()
