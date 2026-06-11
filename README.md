@@ -1,8 +1,8 @@
-# torch-gs
+# torch-splatting
 
 PyTorch implementation of [3D Gaussian Splatting](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/) for learning purposes. Uses [gsplat](https://github.com/nerfstudio-project/gsplat) for the rasterizer.
 
-Heavily inspired by [torch-splatting](https://github.com/hbb1/torch-splatting).
+Heavily inspired by [hbb1/torch-splatting](https://github.com/hbb1/torch-splatting).
 
 | lego (38 dB) | ship (29 dB) |
 |:---:|:---:|
